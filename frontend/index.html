@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Webhook Sandbox Console</title>
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- Custom CSS for terminal styling -->
+    <style>
+      body {
+        background-color: #1a1a1a;
+        font-family: "Courier New", monospace;
+        margin: 0; /* remove default browser margin to eliminate left gap */
+      }
+
+      .terminal-container {
+        background-color: #000;
+        border: 2px solid #333;
+        border-radius: 8px;
+        height: 90vh;
+        overflow: hidden;
+      }
+
+      .terminal-header {
+        background-color: #333;
+        color: #fff;
+        padding: 10px 15px;
+        border-bottom: 1px solid #555;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .terminal-content {
+        height: calc(100% - 120px);
+        overflow-y: auto;
+        padding: 4px 6px; /* tighter horizontal + vertical padding */
+        background-color: #0a0a0a;
+        font-size: 14px;
+        line-height: 1.12; /* reduced line height */
+      }
+
+      .log-entry {
+        margin: 0 0 1px 0; /* tighter vertical spacing */
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .log-entry:last-child {
+        margin-bottom: 0;
+      }
+
+      .log-entry.green {
+        color: #4caf50;
+      }
+
+      .log-entry.yellow {
+        color: #ffc107;
+      }
+
+      .log-entry.red {
+        color: #f44336;
+      }
+
+      .log-entry.white {
+        color: #ffffff;
+      }
+
+      .log-entry.cyan {
+        color: #00ffff;
+      }
+
+      .log-entry.magenta {
+        color: #ff00ff;
+      }
+
+      .log-entry.blue {
+        color: #0080ff;
+      }
+
+      .timestamp {
+        color: #888;
+        margin-right: 5px;
+      }
+
+      .level {
+        font-weight: bold;
+        margin-right: 5px;
+      }
+
+      .message {
+        color: inherit;
+      }
+
+      .terminal-footer {
+        background-color: #333;
+        color: #fff;
+        padding: 10px 15px;
+        border-top: 1px solid #555;
+      }
+
+      .status-badge {
+        font-size: 12px;
+      }
+
+      .info-card {
+        background-color: #2a2a2a;
+        border: 1px solid #444;
+      }
+
+      .info-card .card-body {
+        color: #fff;
+      }
+
+      /* Scrollbar styling */
+      .terminal-content::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .terminal-content::-webkit-scrollbar-track {
+        background: #1a1a1a;
+      }
+
+      .terminal-content::-webkit-scrollbar-thumb {
+        background: #666;
+        border-radius: 4px;
+      }
+
+      .terminal-content::-webkit-scrollbar-thumb:hover {
+        background: #888;
+      }
+
+      .blink {
+        animation: blink-animation 1s steps(5, start) infinite;
+      }
+
+      @keyframes blink-animation {
+        to {
+          visibility: hidden;
+        }
+      }
+
+      .container-fluid {
+        padding: 0 !important;
+      } /* flush to edges */
+
+      .row {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+      }
+
+      .col-lg-9,
+      .col-lg-3 {
+        padding: 4px !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid p-3">
+      <div class="row">
+        <!-- Main Terminal Console -->
+        <div class="col-lg-9">
+          <div class="terminal-container">
+            <div class="terminal-header">
+              <div>
+                <h5 class="mb-0">🔗 Webhook Sandbox Console</h5>
+              </div>
+              <div>
+                <span class="badge bg-success" id="connectionStatus"
+                  >Connected</span
+                >
+                <button
+                  class="btn btn-sm btn-outline-light ms-2"
+                  onclick="clearConsole()"
+                >
+                  Clear
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-light ms-1"
+                  onclick="toggleAutoRefresh()"
+                >
+                  <span id="refreshToggle">⏸️ Pause</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="terminal-content" id="terminalContent">
+              <div class="log-entry green">
+                <span class="timestamp">[Starting...]</span>
+                <span class="level">[INFO]</span>
+                <span class="message"
+                  >Initializing webhook sandbox console...</span
+                >
+              </div>
+            </div>
+
+            <div class="terminal-footer">
+              <small>
+                Last updated: <span id="lastUpdated">--</span> | Auto-refresh:
+                <span id="refreshStatus">ON</span> (5s interval) | Total logs:
+                <span id="logCount">0</span>
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar with Server Info -->
+        <div class="col-lg-3">
+          <div class="card info-card mb-3">
+            <div class="card-header">
+              <h6 class="mb-0">📊 Server Information</h6>
+            </div>
+            <div class="card-body">
+              <p>
+                <strong>Server URL:</strong><br />
+                <small class="text-info" id="serverUrl">Loading...</small>
+              </p>
+
+              <p>
+                <strong>Uptime:</strong><br />
+                <span id="uptime" class="text-success">--</span>
+              </p>
+
+              <p>
+                <strong>Last Request:</strong><br />
+                <span id="lastRequest" class="text-warning">None</span>
+              </p>
+
+              <p>
+                <strong>Total Webhooks:</strong><br />
+                <span id="totalWebhooks" class="text-primary">0</span>
+              </p>
+            </div>
+          </div>
+
+          <div class="card info-card">
+            <div class="card-header">
+              <h6 class="mb-0">🔧 Webhook Endpoints</h6>
+            </div>
+            <div class="card-body">
+              <div class="mb-2">
+                <strong>POST /webhook</strong><br />
+                <small class="text-muted">Main webhook receiver</small>
+              </div>
+              <div class="mb-2">
+                <strong>GET /info</strong><br />
+                <small class="text-muted">Server information</small>
+              </div>
+              <div class="mb-2">
+                <strong>GET /webhooks</strong><br />
+                <small class="text-muted">All webhook logs</small>
+              </div>
+              <div>
+                <strong>GET /logs</strong><br />
+                <small class="text-muted">Console logs</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+      let refreshInterval;
+      let isAutoRefreshEnabled = true;
+      let lastLogCount = 0;
+
+      const terminalContent = document.getElementById("terminalContent");
+      const connectionStatus = document.getElementById("connectionStatus");
+      const serverUrl = document.getElementById("serverUrl");
+      const uptimeEl = document.getElementById("uptime");
+      const lastRequestEl = document.getElementById("lastRequest");
+      const totalWebhooksEl = document.getElementById("totalWebhooks");
+      const lastUpdatedEl = document.getElementById("lastUpdated");
+      const logCountEl = document.getElementById("logCount");
+      const refreshStatusEl = document.getElementById("refreshStatus");
+      const refreshToggleEl = document.getElementById("refreshToggle");
+
+      // Backend server configuration
+      const BACKEND_URL = "http://localhost:3001"; // Configure this to match your backend server
+
+      function fetchLogs() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", `${BACKEND_URL}/logs`, true);
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+              const logs = JSON.parse(xhr.responseText);
+              updateConsole(logs);
+              updateConnectionStatus(true);
+              lastUpdatedEl.textContent = new Date().toLocaleTimeString();
+            } else {
+              updateConnectionStatus(false);
+              console.error("Failed to fetch logs:", xhr.status);
+            }
+          }
+        };
+        xhr.onerror = function () {
+          updateConnectionStatus(false);
+          console.error("Network error while fetching logs");
+        };
+        xhr.send();
+      }
+
+      function fetchServerInfo() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", `${BACKEND_URL}/info`, true);
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 4 && xhr.status === 200) {
+            const data = JSON.parse(xhr.responseText);
+            updateServerInfo(data);
+          }
+        };
+        xhr.send();
+
+        // Also fetch webhook count
+        const webhookXhr = new XMLHttpRequest();
+        webhookXhr.open("GET", `${BACKEND_URL}/webhooks`, true);
+        webhookXhr.onreadystatechange = function () {
+          if (webhookXhr.readyState === 4 && webhookXhr.status === 200) {
+            const webhooks = JSON.parse(webhookXhr.responseText);
+            totalWebhooksEl.textContent = webhooks.length;
+          }
+        };
+        webhookXhr.send();
+      }
+
+      function updateConsole(logs) {
+        // Only update if there are new logs
+        if (logs.length !== lastLogCount) {
+          terminalContent.innerHTML = "";
+
+          logs.forEach((log) => {
+            addLogEntry(log);
+          });
+
+          lastLogCount = logs.length;
+          logCountEl.textContent = logs.length;
+
+          // Auto-scroll to bottom
+          terminalContent.scrollTop = terminalContent.scrollHeight;
+        }
+      }
+
+      function addLogEntry(logData) {
+        const logEntry = document.createElement("div");
+        logEntry.className = `log-entry ${logData.color || "white"}`;
+        const timestamp = new Date(logData.timestamp).toLocaleTimeString();
+        logEntry.innerHTML =
+          '<span class="timestamp">[' +
+          timestamp +
+          "]</span>" +
+          '<span class="level">[' +
+          logData.level.toUpperCase() +
+          "]</span>" +
+          '<span class="message">' +
+          (logData.message || "") +
+          "</span>";
+        terminalContent.appendChild(logEntry);
+      }
+
+      function updateConnectionStatus(isConnected) {
+        if (isConnected) {
+          connectionStatus.textContent = "Connected";
+          connectionStatus.className = "badge bg-success";
+        } else {
+          connectionStatus.textContent = "Disconnected";
+          connectionStatus.className = "badge bg-danger";
+        }
+      }
+
+      function updateServerInfo(data) {
+        const uptimeMs = data.uptime;
+        const uptimeStr = formatUptime(uptimeMs);
+        uptimeEl.textContent = uptimeStr;
+
+        if (data.lastRequest) {
+          const lastReq = new Date(data.lastRequest).toLocaleString();
+          lastRequestEl.textContent = lastReq;
+        }
+      }
+
+      function formatUptime(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+        return `${seconds}s`;
+      }
+
+      function clearConsole() {
+        terminalContent.innerHTML = "";
+        addLogEntry({
+          level: "info",
+          message: "Console cleared by user",
+          timestamp: new Date().toISOString(),
+          color: "green",
+        });
+        lastLogCount = 1;
+        logCountEl.textContent = "1";
+      }
+
+      function toggleAutoRefresh() {
+        isAutoRefreshEnabled = !isAutoRefreshEnabled;
+
+        if (isAutoRefreshEnabled) {
+          startAutoRefresh();
+          refreshStatusEl.textContent = "ON";
+          refreshToggleEl.textContent = "⏸️ Pause";
+        } else {
+          stopAutoRefresh();
+          refreshStatusEl.textContent = "OFF";
+          refreshToggleEl.textContent = "▶️ Resume";
+        }
+      }
+
+      function startAutoRefresh() {
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(() => {
+          fetchLogs();
+          fetchServerInfo();
+        }, 5000);
+      }
+
+      function stopAutoRefresh() {
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+          refreshInterval = null;
+        }
+      }
+
+      // Initialize
+      function init() {
+        serverUrl.textContent = BACKEND_URL; // Show the actual backend server URL
+
+        // Initial fetch
+        fetchLogs();
+        fetchServerInfo();
+
+        // Start auto-refresh
+        startAutoRefresh();
+
+        console.log("Webhook Sandbox Console initialized");
+        console.log("Backend server:", BACKEND_URL);
+      }
+
+      // Start the application
+      init();
+    </script>
+  </body>
+</html>

@@ -4,13 +4,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Database files
+# Database files (not needed for Vercel branch)
 db.json
 *.db
 *.sqlite
 *.sqlite3
 
-# Log files
+# Log files (not needed for Vercel branch) 
 logs/
 *.log
 combined.log
@@ -31,8 +31,12 @@ pids
 .env.test.local
 .env.production.local
 
-# PM2 process files
+# PM2 process files (not needed for Vercel)
 .pm2/
+ecosystem.config.js
+
+# Vercel
+.vercel
 
 # Coverage directory used by tools like istanbul
 coverage/

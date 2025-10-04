@@ -283,9 +283,11 @@
       const refreshToggleEl = document.getElementById("refreshToggle");
 
       // Backend server configuration
-      const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? "http://localhost:3001"  // Local development
-        : "/api";  // Production (Vercel)
+      const BACKEND_URL =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+          ? "http://localhost:3001" // Local development
+          : "/api"; // Production (Vercel)
 
       function fetchLogs() {
         const xhr = new XMLHttpRequest();

@@ -214,7 +214,7 @@ const PORT = process.env.PORT || 3001;
 const BASE_URL =
   process.env.BASE_URL ||
   (NODE_ENV === "production"
-    ? `https://your-domain.com`
+    ? `https://webhook-sandbox-tfyv.onrender.com`
     : `http://localhost:${PORT}`);
 
 const server = app.listen(PORT, () => {

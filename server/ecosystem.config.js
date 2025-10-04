@@ -15,7 +15,7 @@ export default {
       env_production: {
         NODE_ENV: "production",
         PORT: 3001,
-        BASE_URL: "https://webhook-sandbox-tfyv.onrender.com",
+        BASE_URL: "http://webhook-sandbox-rouge.vercel.app/",
       },
       error_file: "./logs/err.log",
       out_file: "./logs/out.log",

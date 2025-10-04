@@ -4,28 +4,20 @@
     {
       "src": "server/index.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "frontend/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/webhook",
-      "dest": "/server/index.js"
-    },
-    {
-      "src": "/info",
-      "dest": "/server/index.js"
-    },
-    {
-      "src": "/webhooks",
-      "dest": "/server/index.js"
-    },
-    {
-      "src": "/logs",
+      "src": "/api/(.*)",
       "dest": "/server/index.js"
     },
     {
       "src": "/(.*)",
-      "dest": "/server/index.js"
+      "dest": "/frontend/$1"
     }
   ]
 }

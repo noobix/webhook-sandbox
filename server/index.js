@@ -4,7 +4,6 @@ import cors from "cors";
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static("../frontend"));
 
 // In-memory storage for webhooks (no file persistence)
 let webhookData = {
@@ -15,15 +14,14 @@ let webhookData = {
 
 // Environment configuration
 const NODE_ENV = process.env.NODE_ENV || "development";
-const PORT = process.env.PORT || 3001;
 const BASE_URL =
   process.env.BASE_URL ||
   (NODE_ENV === "production"
-    ? `http://webhook-sandbox-rouge.vercel.app`
-    : `http://localhost:${PORT}`);
+    ? `https://webhook-sandbox-rouge.vercel.app`
+    : `http://localhost:3001`);
 
 // Webhook POST route with error handling
-app.post("/webhook", async (req, res) => {
+app.post("/api/webhook", async (req, res) => {
   try {
     const origin = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
     const details = {
@@ -58,7 +56,7 @@ app.post("/webhook", async (req, res) => {
 });
 
 // Info route
-app.get("/info", (req, res) => {
+app.get("/api/info", (req, res) => {
   const uptime = Date.now() - webhookData.startTime;
   res.json({
     uptime,
@@ -67,44 +65,29 @@ app.get("/info", (req, res) => {
 });
 
 // Route to get all webhook logs
-app.get("/webhooks", (req, res) => {
+app.get("/api/webhooks", (req, res) => {
   res.json(webhookData.webhooks);
 });
 
 // Route to get console logs (empty for Vercel compatibility)
-app.get("/logs", (req, res) => {
+app.get("/api/logs", (req, res) => {
   res.json([]);
 });
 
 // Health check for Vercel
-app.get("/", (req, res) => {
+app.get("/api", (req, res) => {
   res.json({
     status: "ok",
-    message: "Webhook Sandbox is running",
+    message: "Webhook Sandbox API is running",
     uptime: Date.now() - webhookData.startTime,
-    endpoints: ["/webhook", "/info", "/webhooks", "/logs"],
+    endpoints: ["/api/webhook", "/api/info", "/api/webhooks", "/api/logs"],
   });
 });
 
-// Global error handlers
-process.on("uncaughtException", (error) => {
-  console.error(`Uncaught Exception: ${error.message}`);
-  process.exit(1);
+// Catch all API routes
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ error: "API endpoint not found" });
 });
 
-process.on("unhandledRejection", (reason, promise) => {
-  console.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
-  process.exit(1);
-});
-
-const server = app.listen(PORT, () => {
-  console.log(`✓ Server running on port ${PORT} in ${NODE_ENV} mode`);
-  console.log(`➤ Webhook endpoint: ${BASE_URL}/webhook`);
-  console.log(`➤ Info endpoint: ${BASE_URL}/info`);
-});
-
-server.on("error", (error) => {
-  console.error(`Server error: ${error.message}`);
-});
-
+// For Vercel serverless function
 export default app;

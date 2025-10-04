@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 3001;
 const BASE_URL =
   process.env.BASE_URL ||
   (NODE_ENV === "production"
-    ? `https://webhook-sandbox-rouge.vercel.app`
+    ? `http://webhook-sandbox-rouge.vercel.app`
     : `http://localhost:${PORT}`);
 
 // Webhook POST route with error handling

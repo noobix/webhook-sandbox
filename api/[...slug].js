@@ -8,7 +8,7 @@ let globalState = {
   startTime: Date.now(),
 };
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -76,7 +76,7 @@ function handleWebhook(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const origin = req.headers["x-forwarded-for"] || req.connection.remoteAddress || 'unknown';
+  const origin = req.headers["x-forwarded-for"] || req.connection?.remoteAddress || 'unknown';
   const details = {
     url: req.url,
     origin,

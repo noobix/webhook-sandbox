@@ -1,27 +1,139 @@
 import express from "express";
+import winston from "winston";
+import chalk from "chalk";
+import { Low } from "lowdb";
+import { JSONFile } from "lowdb/node";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
 import cors from "cors";
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// In-memory storage for webhooks (no file persistence)
-let webhookData = {
+// Create logs directory if it doesn't exist
+const logsDir = path.join(__dirname, "logs");
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+
+const dbFile = path.join(__dirname, "db.json");
+const adapter = new JSONFile(dbFile);
+const defaultData = {
   webhooks: [],
   lastRequest: null,
   startTime: Date.now(),
+  logs: [],
 };
+const db = new Low(adapter, defaultData);
+await db.read();
 
-// Environment configuration
-const NODE_ENV = process.env.NODE_ENV || "development";
-const BASE_URL =
-  process.env.BASE_URL ||
-  (NODE_ENV === "production"
-    ? `https://webhook-sandbox-rouge.vercel.app`
-    : `http://localhost:3001`);
+const app = express();
+app.use(
+  cors({
+    origin: "*",
+    authenticated: false,
+  })
+);
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "../frontend")));
+
+// Custom transport to store logs in database
+class DatabaseTransport extends winston.Transport {
+  constructor(options = {}) {
+    super(options);
+    this.name = "database";
+    this.logBuffer = [];
+    this.writeTimeout = null;
+  }
+
+  log(info, callback) {
+    const logEntry = {
+      level: info.level,
+      message: info.message,
+      timestamp: info.timestamp,
+      service: info.service,
+      color: this.getColorForLevel(info.level),
+    };
+
+    // Add to buffer instead of immediate database write
+    this.logBuffer.push(logEntry);
+
+    // Debounced write - only write every 3 seconds
+    if (this.writeTimeout) {
+      clearTimeout(this.writeTimeout);
+    }
+
+    this.writeTimeout = setTimeout(() => {
+      // Add buffered logs to database
+      db.data.logs.push(...this.logBuffer);
+
+      // Keep only last 500 logs for performance
+      if (db.data.logs.length > 500) {
+        db.data.logs = db.data.logs.slice(-500);
+      }
+
+      // Write to file
+      db.write();
+
+      // Clear buffer
+      this.logBuffer = [];
+      this.writeTimeout = null;
+    }, 3000); // Write every 3 seconds
+
+    callback();
+  }
+
+  getColorForLevel(level) {
+    switch (level) {
+      case "info":
+        return "green";
+      case "warn":
+        return "yellow";
+      case "error":
+        return "red";
+      default:
+        return "white";
+    }
+  }
+}
+
+// Winston logger with chalk and file logging
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: { service: "webhook-sandbox" },
+  transports: [
+    new winston.transports.File({
+      filename: path.join(logsDir, "error.log"),
+      level: "error",
+    }),
+    new winston.transports.File({
+      filename: path.join(logsDir, "combined.log"),
+    }),
+    new DatabaseTransport(),
+    new winston.transports.Console({
+      format: winston.format.printf(({ level, message, timestamp }) => {
+        let colorFn = chalk.white;
+        if (level === "info") colorFn = chalk.green;
+        if (level === "warn") colorFn = chalk.yellow;
+        if (level === "error") colorFn = chalk.red;
+        return colorFn(
+          `[${new Date(
+            timestamp
+          ).toLocaleTimeString()}] [${level.toUpperCase()}] ${message}`
+        );
+      }),
+    }),
+  ],
+});
 
 // Webhook POST route with error handling
-app.post("/api/webhook", async (req, res) => {
+app.post("/webhook", async (req, res) => {
   try {
     const origin = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
     const details = {
@@ -32,15 +144,15 @@ app.post("/api/webhook", async (req, res) => {
       headers: req.headers,
     };
 
-    webhookData.webhooks.push(details);
-    webhookData.lastRequest = details.time;
+    db.data.webhooks.push(details);
+    db.data.lastRequest = details.time;
+    await db.write();
 
-    // Keep only last 100 webhooks in memory
-    if (webhookData.webhooks.length > 100) {
-      webhookData.webhooks = webhookData.webhooks.slice(-100);
-    }
-
-    console.log(`Webhook received from ${origin} on ${req.originalUrl}`);
+    logger.info(
+      `Webhook received from ${chalk.cyan(origin)} on ${chalk.blue(
+        req.originalUrl
+      )}`
+    );
 
     res.json({
       message: "Webhook received",
@@ -50,44 +162,77 @@ app.post("/api/webhook", async (req, res) => {
       timestamp: details.time,
     });
   } catch (error) {
-    console.error(`Error processing webhook: ${error.message}`);
+    logger.error(`Error processing webhook: ${error.message}`);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Info route
-app.get("/api/info", (req, res) => {
-  const uptime = Date.now() - webhookData.startTime;
+app.get("/info", (req, res) => {
+  const uptime = Date.now() - db.data.startTime;
   res.json({
     uptime,
-    lastRequest: webhookData.lastRequest,
+    lastRequest: db.data.lastRequest,
   });
 });
 
 // Route to get all webhook logs
-app.get("/api/webhooks", (req, res) => {
-  res.json(webhookData.webhooks);
+app.get("/webhooks", (req, res) => {
+  res.json(db.data.webhooks);
 });
 
-// Route to get console logs (empty for Vercel compatibility)
-app.get("/api/logs", (req, res) => {
-  res.json([]);
+// Route to get console logs
+app.get("/logs", (req, res) => {
+  res.json(db.data.logs || []);
 });
 
-// Health check for Vercel
-app.get("/api", (req, res) => {
-  res.json({
-    status: "ok",
-    message: "Webhook Sandbox API is running",
-    uptime: Date.now() - webhookData.startTime,
-    endpoints: ["/api/webhook", "/api/info", "/api/webhooks", "/api/logs"],
-  });
+// Global error handlers
+process.on("uncaughtException", (error) => {
+  logger.error(`Uncaught Exception: ${error.message}`, { stack: error.stack });
+  process.exit(1);
 });
 
-// Catch all API routes
-app.use("/api/*", (req, res) => {
-  res.status(404).json({ error: "API endpoint not found" });
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
+  process.exit(1);
 });
 
-// For Vercel serverless function
-export default app;
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  logger.info("Received SIGTERM signal. Shutting down gracefully...");
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  logger.info("Received SIGINT signal. Shutting down gracefully...");
+  process.exit(0);
+});
+
+// Environment configuration
+const NODE_ENV = process.env.NODE_ENV || "development";
+const PORT = process.env.PORT || 3001;
+const BASE_URL =
+  process.env.BASE_URL ||
+  (NODE_ENV === "production"
+    ? `http://webhook-sandbox-rouge.vercel.app/`
+    : `http://localhost:${PORT}`);
+
+const server = app.listen(PORT, () => {
+  logger.info(
+    `${chalk.green("✓")} Server running on port ${chalk.cyan(
+      PORT
+    )} in ${chalk.magenta(NODE_ENV)} mode`
+  );
+  logger.info(
+    `${chalk.yellow("➤")} Webhook endpoint: ${chalk.blue(
+      `${BASE_URL}/webhook`
+    )}`
+  );
+  logger.info(
+    `${chalk.yellow("➤")} Info endpoint: ${chalk.blue(`${BASE_URL}/info`)}`
+  );
+});
+
+server.on("error", (error) => {
+  logger.error(`Server error: ${error.message}`);
+});

@@ -8,9 +8,9 @@ Webhook Sandbox provides a simple way to receive, log, and monitor webhook reque
 
 - **Real-time webhook receiver** with detailed logging
 - **Terminal-style web console** displaying colored logs
-- **Lightweight database** for storing webhook data
+- **In-memory storage** optimized for serverless deployments
 - **Server monitoring** with uptime and request statistics
-- **Auto-restart capabilities** for production deployment
+- **Serverless-friendly** with no disk persistence required
 
 ## 🏗️ Project Structure
 
@@ -136,10 +136,11 @@ npm start                    # Standard production start
 
 ### Logging & Monitoring
 
-- **Winston logging** with file and console output
+- **Winston logging** with console output only
 - **Colored console output** using Chalk
 - **Request origin tracking** (IP addresses)
-- **Automatic log rotation** (keeps last 500 entries)
+- **In-memory log storage** (keeps last 100 entries)
+- **Serverless compatible** (no file system writes)
 
 ### Database
 

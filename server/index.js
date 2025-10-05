@@ -1,32 +1,20 @@
 import express from "express";
 import winston from "winston";
 import chalk from "chalk";
-import { Low } from "lowdb";
-import { JSONFile } from "lowdb/node";
+import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import fs from "fs";
-import cors from "cors";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, "logs");
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
-
-const dbFile = path.join(__dirname, "db.json");
-const adapter = new JSONFile(dbFile);
-const defaultData = {
+// In-memory storage for serverless environments (no disk persistence)
+const memoryStore = {
   webhooks: [],
   lastRequest: null,
   startTime: Date.now(),
   logs: [],
 };
-const db = new Low(adapter, defaultData);
-await db.read();
 
 const app = express();
 app.use(
@@ -38,13 +26,11 @@ app.use(
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../frontend")));
 
-// Custom transport to store logs in database
-class DatabaseTransport extends winston.Transport {
+// In-memory transport for real-time logs (no disk persistence)
+class MemoryTransport extends winston.Transport {
   constructor(options = {}) {
     super(options);
-    this.name = "database";
-    this.logBuffer = [];
-    this.writeTimeout = null;
+    this.name = "memory";
   }
 
   log(info, callback) {
@@ -56,30 +42,13 @@ class DatabaseTransport extends winston.Transport {
       color: this.getColorForLevel(info.level),
     };
 
-    // Add to buffer instead of immediate database write
-    this.logBuffer.push(logEntry);
+    // Store in memory only (no disk writes for serverless)
+    memoryStore.logs.push(logEntry);
 
-    // Debounced write - only write every 3 seconds
-    if (this.writeTimeout) {
-      clearTimeout(this.writeTimeout);
+    // Keep only last 100 logs in memory for performance
+    if (memoryStore.logs.length > 100) {
+      memoryStore.logs = memoryStore.logs.slice(-100);
     }
-
-    this.writeTimeout = setTimeout(() => {
-      // Add buffered logs to database
-      db.data.logs.push(...this.logBuffer);
-
-      // Keep only last 500 logs for performance
-      if (db.data.logs.length > 500) {
-        db.data.logs = db.data.logs.slice(-500);
-      }
-
-      // Write to file
-      db.write();
-
-      // Clear buffer
-      this.logBuffer = [];
-      this.writeTimeout = null;
-    }, 3000); // Write every 3 seconds
 
     callback();
   }
@@ -98,7 +67,7 @@ class DatabaseTransport extends winston.Transport {
   }
 }
 
-// Winston logger with chalk and file logging
+// Winston logger with console only (no file logging for serverless)
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
@@ -108,14 +77,7 @@ const logger = winston.createLogger({
   ),
   defaultMeta: { service: "webhook-sandbox" },
   transports: [
-    new winston.transports.File({
-      filename: path.join(logsDir, "error.log"),
-      level: "error",
-    }),
-    new winston.transports.File({
-      filename: path.join(logsDir, "combined.log"),
-    }),
-    new DatabaseTransport(),
+    new MemoryTransport(),
     new winston.transports.Console({
       format: winston.format.printf(({ level, message, timestamp }) => {
         let colorFn = chalk.white;
@@ -144,9 +106,14 @@ app.post("/webhook", async (req, res) => {
       headers: req.headers,
     };
 
-    db.data.webhooks.push(details);
-    db.data.lastRequest = details.time;
-    await db.write();
+    memoryStore.webhooks.push(details);
+    
+    // Keep only last 50 webhooks in memory
+    if (memoryStore.webhooks.length > 50) {
+      memoryStore.webhooks = memoryStore.webhooks.slice(-50);
+    }
+    
+    memoryStore.lastRequest = details.time;
 
     logger.info(
       `Webhook received from ${chalk.cyan(origin)} on ${chalk.blue(
@@ -169,21 +136,21 @@ app.post("/webhook", async (req, res) => {
 
 // Info route
 app.get("/info", (req, res) => {
-  const uptime = Date.now() - db.data.startTime;
+  const uptime = Date.now() - memoryStore.startTime;
   res.json({
     uptime,
-    lastRequest: db.data.lastRequest,
+    lastRequest: memoryStore.lastRequest,
   });
 });
 
 // Route to get all webhook logs
 app.get("/webhooks", (req, res) => {
-  res.json(db.data.webhooks);
+  res.json(memoryStore.webhooks);
 });
 
 // Route to get console logs
 app.get("/logs", (req, res) => {
-  res.json(db.data.logs || []);
+  res.json(memoryStore.logs || []);
 });
 
 // Global error handlers

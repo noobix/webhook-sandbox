@@ -107,12 +107,12 @@ app.post("/webhook", async (req, res) => {
     };
 
     memoryStore.webhooks.push(details);
-    
+
     // Keep only last 50 webhooks in memory
     if (memoryStore.webhooks.length > 50) {
       memoryStore.webhooks = memoryStore.webhooks.slice(-50);
     }
-    
+
     memoryStore.lastRequest = details.time;
 
     logger.info(
